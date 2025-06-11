@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkPulse Hub</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background-color: #f5f7fa; 
+      color: #333;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    nav {
+      background: linear-gradient(135deg, #4361ee, #3a0ca3);
+      color: white;
+      padding: 1rem 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .nav-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .nav-links a {
+      color: white;
+      text-decoration: none;
+      margin-left: 20px;
+      font-weight: 500;
+      transition: opacity 0.3s;
+    }
+    .nav-links a:hover {
+      opacity: 0.8;
+    }
+    .card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      padding: 25px;
+      margin-bottom: 25px;
+    }
+    .btn {
+      background: #4361ee;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.3s;
+    }
+    .btn:hover {
+      background: #3a0ca3;
+    }
+    .btn-upload {
+      background: #2ec4b6;
+    }
+    .btn-upload:hover {
+      background: #1a9c8f;
+    }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      margin-bottom: 15px;
+      font-size: 16px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .backlink-item {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #eee;
+      padding: 15px 0;
+    }
+    .spam-score {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .score-low { color: #2ec4b6; }
+    .score-medium { color: #ff9f1c; }
+    .score-high { color: #e71d36; }
+    .status-live { color: #2ec4b6; }
+    .status-dead { color: #e71d36; }
+    .upload-section {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    .error { color: #e71d36; margin-bottom: 15px; }
+    .success { color: #2ec4b6; margin-bottom: 15px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Auth Context
+    const AuthContext = React.createContext();
+
+    const AuthProvider = ({ children }) => {
+      const [user, setUser] = useState(null);
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          axios.get('/api/auth/user')
+            .then(res => {
+              setUser(res.data);
+              setIsAuthenticated(true);
+            })
+            .catch(() => localStorage.removeItem('token'))
+            .finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      }, []);
+
+      const login = async (email, password) => {
+        try {
+          const res = await axios.post('/api/auth/login', { email, password });
+          localStorage.setItem('token', res.data.token);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+          setUser(res.data.user);
+          setIsAuthenticated(true);
+          return true;
+        } catch (err) {
+          throw new Error('Login failed');
+        }
+      };
+
+      const register = async (name, email, password) => {
+        try {
+          const res = await axios.post('/api/auth/register', { name, email, password });
+          localStorage.setItem('token', res.data.token);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+          setUser(res.data.user);
+          setIsAuthenticated(true);
+          return true;
+        } catch (err) {
+          throw new Error('Registration failed');
+        }
+      };
+
+      const logout = async () => {
+        await axios.post('/api/auth/logout');
+        localStorage.removeItem('token');
+        delete axios.defaults.headers.common['Authorization'];
+        setUser(null);
+        setIsAuthenticated(false);
+      };
+
+      return (
+        <AuthContext.Provider value={{ 
+          user, 
+          isAuthenticated, 
+          loading,
+          login,
+          register,
+          logout
+        }}>
+          {children}
+        </AuthContext.Provider>
+      );
+    };
+
+    const useAuth = () => React.useContext(AuthContext);
+
+    // Navbar Component
+    const Navbar = () => {
+      const { user, isAuthenticated, logout } = useAuth();
+      
+      return (
+        <nav>
+          <div className="container nav-container">
+            <div className="logo">LinkPulse Hub</div>
+            <div className="nav-links">
+              {isAuthenticated ? (
+                <>
+                  <span>Hello, {user.name}</span>
+                  <a href="#" onClick={logout}>Logout</a>
+                </>
+              ) : (
+                <>
+                  <a href="#login">Login</a>
+                  <a href="#register">Register</a>
+                </>
+              )}
+            </div>
+          </div>
+        </nav>
+      );
+    };
+
+    // Login Component
+    const Login = () => {
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const { login } = useAuth();
+      
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+          await login(email, password);
+          window.location.hash = '';
+        } catch (err) {
+          setError('Invalid credentials');
+        }
+      };
+      
+      return (
+        <div className="container">
+          <div className="card">
+            <h2>Login</h2>
+            {error && <div className="error">{error}</div>}
+            <form onSubmit={handleSubmit}>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button type="submit" className="btn">Login</button>
+            </form>
+          </div>
+        </div>
+      );
+    };
+
+    // Register Component
+    const Register = () => {
+      const [name, setName] = useState('');
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const { register } = useAuth();
+      
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+          await register(name, email, password);
+          window.location.hash = '';
+        } catch (err) {
+          setError('Error creating account');
+        }
+      };
+      
+      return (
+        <div className="container">
+          <div className="card">
+            <h2>Create Account</h2>
+            {error && <div className="error">{error}</div>}
+            <form onSubmit={handleSubmit}>
+              <input
+                type="text"
+                placeholder="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button type="submit" className="btn">Register</button>
+            </form>
+          </div>
+        </div>
+      );
+    };
+
+    // Backlink Dashboard
+    const Dashboard = () => {
+      const [url, setUrl] = useState('');
+      const [siteId, setSiteId] = useState('');
+      const [sites, setSites] = useState([]);
+      const [backlinks, setBacklinks] = useState([]);
+      const [error, setError] = useState('');
+      const [success, setSuccess] = useState('');
+      const [file, setFile] = useState(null);
+      const [uploading, setUploading] = useState(false);
+      const { user } = useAuth();
+
+      useEffect(() => {
+        const fetchData = async () => {
+          try {
+            const sitesRes = await axios.get('/api/sites');
+            setSites(sitesRes.data);
+            if (sitesRes.data.length > 0) setSiteId(sitesRes.data[0]._id);
+            
+            const backlinksRes = await axios.get('/api/backlinks');
+            setBacklinks(backlinksRes.data);
+          } catch (err) {
+            console.error(err);
+          }
+        };
+        
+        if (user) fetchData();
+      }, [user]);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const res = await axios.post('/api/backlinks', { url, siteId });
+          setBacklinks([res.data, ...backlinks]);
+          setSuccess('Backlink added successfully!');
+          setUrl('');
+          setTimeout(() => setSuccess(''), 3000);
+        } catch (err) {
+          setError(err.response?.data?.msg || 'Error adding backlink');
+        }
+      };
+
+      const handleFileUpload = async (e) => {
+        e.preventDefault();
+        if (!file) {
+          setError('Please select a file');
+          return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+          setUploading(true);
+          const res = await axios.post('/api/backlinks/upload', formData);
+          setUploading(false);
+          setSuccess(`Uploaded ${res.data.success} backlinks successfully!`);
+          setFile(null);
+          
+          // Refresh backlinks
+          const backlinksRes = await axios.get('/api/backlinks');
+          setBacklinks(backlinksRes.data);
+        } catch (err) {
+          setUploading(false);
+          setError('Error uploading file');
+        }
+      };
+
+      const getScoreClass = (score) => {
+        if (score <= 30) return 'score-low';
+        if (score <= 70) return 'score-medium';
+        return 'score-high';
+      };
+
+      return (
+        <div className="container">
+          <div className="card">
+            <h2>Add New Backlink</h2>
+            {error && <div className="error">{error}</div>}
+            {success && <div className="success">{success}</div>}
+            
+            <form onSubmit={handleSubmit}>
+              <select 
+                value={siteId} 
+                onChange={(e) => setSiteId(e.target.value)}
+                required
+              >
+                {sites.map(site => (
+                  <option key={site._id} value={site._id}>
+                    {site.name} ({site.domain})
+                  </option>
+                ))}
+              </select>
+              
+              <input
+                type="url"
+                placeholder="https://example.com"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                required
+              />
+              
+              <button type="submit" className="btn">Submit Backlink</button>
+            </form>
+            
+            <div className="upload-section">
+              <h3>Or upload Excel file</h3>
+              <p>File format: Columns must include "URL" and "Site Domain"</p>
+              
+              <form onSubmit={handleFileUpload}>
+                <input 
+                  type="file" 
+                  accept=".xlsx,.xls"
+                  onChange={(e) => setFile(e.target.files[0])}
+                />
+                <button 
+                  type="submit" 
+                  className="btn btn-upload"
+                  disabled={uploading}
+                >
+                  {uploading ? 'Uploading...' : 'Upload Excel'}
+                </button>
+              </form>
+            </div>
+          </div>
+          
+          <div className="card">
+            <h2>Your Backlinks ({backlinks.length})</h2>
+            {backlinks.length === 0 ? (
+              <p>No backlinks submitted yet</p>
+            ) : (
+              backlinks.map(backlink => (
+                <div key={backlink._id} className="backlink-item">
+                  <div>
+                    <div>
+                      <strong>URL:</strong> 
+                      <a href={backlink.url} target="_blank" rel="noopener noreferrer">
+                        {backlink.url}
+                      </a>
+                    </div>
+                    <div>
+                      <strong>Site:</strong> {backlink.site?.name}
+                    </div>
+                    <div>
+                      <strong>Status:</strong> 
+                      <span className={backlink.isLive ? 'status-live' : 'status-dead'}>
+                        {backlink.isLive ? ' Live' : ' Not Live'}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <div>Spam Score</div>
+                    <div className={`spam-score ${getScoreClass(backlink.spamScore)}`}>
+                      {backlink.spamScore}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // Main App Component
+    const App = () => {
+      const [route, setRoute] = useState(window.location.hash);
+      const { isAuthenticated, loading } = useAuth();
+      
+      useEffect(() => {
+        const handleHashChange = () => setRoute(window.location.hash);
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+      }, []);
+      
+      if (loading) {
+        return (
+          <div className="container">
+            <p>Loading...</p>
+          </div>
+        );
+      }
+      
+      return (
+        <>
+          <Navbar />
+          {!isAuthenticated ? (
+            route === '#register' ? <Register /> : <Login />
+          ) : (
+            <Dashboard />
+          )}
+        </>
+      );
+    };
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    );
+  </script>
+</body>
+</html>
